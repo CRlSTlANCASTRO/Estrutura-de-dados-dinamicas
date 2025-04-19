@@ -1,0 +1,231 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+
+#define NUM_CHARS 256
+
+typedef struct ArvoreTrie {
+    struct ArvoreTrie *filhos[NUM_CHARS];
+    bool termino;
+} ArvoreTrie;
+
+ArvoreTrie *CriaArvore() {
+    ArvoreTrie *arv = (ArvoreTrie*)malloc(sizeof(ArvoreTrie));
+    for (int i = 0; i < NUM_CHARS; i++) {
+        arv->filhos[i] = NULL;
+    }
+    arv->termino = false;
+    return arv;
+}
+
+bool InsereArvore(ArvoreTrie **arv, char *texto) {
+    if (*arv == NULL) {
+        *arv = CriaArvore();
+    }
+
+    ArvoreTrie *tmp = *arv;
+    unsigned char *caracter = (unsigned char *)texto;
+    int comprimento = strlen(texto);
+
+    for (int i = 0; i < comprimento; i++) {
+        if (tmp->filhos[caracter[i]] == NULL) {
+            tmp->filhos[caracter[i]] = CriaArvore();
+        }
+        tmp = tmp->filhos[caracter[i]];
+    }
+
+    if (tmp->termino) {
+        return false;
+    } else {
+        tmp->termino = true;
+        return true;
+    }
+}
+
+void ImprimeArvoreRec(ArvoreTrie *arv, unsigned char *prefixo, int comprimento) {
+    unsigned char novoprefixo[comprimento + 2];
+    memcpy(novoprefixo, prefixo, comprimento);
+    novoprefixo[comprimento + 1] = 0;
+
+    if (arv->termino) {
+        printf("Palavra: %s\n", prefixo);
+    }
+
+    for (int i = 0; i < NUM_CHARS; i++) {
+        if (arv->filhos[i] != NULL) {
+            novoprefixo[comprimento] = i;
+            ImprimeArvoreRec(arv->filhos[i], novoprefixo, comprimento + 1);
+        }
+    }
+}
+
+void ImprimeArvore(ArvoreTrie *arv) {
+    if (arv == NULL) {
+        printf("Arvore Vazia\n");
+        return;
+    }
+
+    unsigned char prefixo[1] = {0};
+    ImprimeArvoreRec(arv, prefixo, 0);
+}
+
+bool ProcuraArvore(ArvoreTrie *arv, char *texto) {
+    unsigned char *caracter = (unsigned char *)texto;
+    int comprimento = strlen(texto);
+    ArvoreTrie *tmp = arv;
+
+    for (int i = 0; i < comprimento; i++) {
+        if (tmp->filhos[caracter[i]] == NULL) {
+            return false;
+        }
+        tmp = tmp->filhos[caracter[i]];
+    }
+    return tmp->termino;
+}
+
+bool no_tem_filho(ArvoreTrie *arv) {
+    if (arv == NULL) return false;
+    for (int i = 0; i < NUM_CHARS; i++) {
+        if (arv->filhos[i] != NULL) {
+            return true;
+        }
+    }
+    return false;
+}
+
+ArvoreTrie* RemoveArvRec(ArvoreTrie *arv, unsigned char *texto, bool *removido) {
+    if (arv == NULL) return arv;
+
+    if (*texto == '\0') {
+        if (arv->termino) {
+            arv->termino = false;
+            *removido = true;
+            if (!no_tem_filho(arv)) {
+                free(arv);
+                arv = NULL;
+            }
+        }
+        return arv;
+    }
+
+    arv->filhos[*texto] = RemoveArvRec(arv->filhos[*texto], texto + 1, removido);
+    
+    if (*removido && !no_tem_filho(arv) && !arv->termino) {
+        free(arv);
+        arv = NULL;
+    }
+
+    return arv;
+}
+
+bool RemoveArv(ArvoreTrie **arv, char *texto) {
+    unsigned char *caracter = (unsigned char *)texto;
+    bool resultado = false;
+
+    if (*arv == NULL) return false;
+
+    *arv = RemoveArvRec(*arv, caracter, &resultado);
+    return resultado;
+}
+
+bool VerificaPrefixo(ArvoreTrie *arv, char *prefixo) {
+    unsigned char *caracter = (unsigned char *)prefixo;
+    int comprimento = strlen(prefixo);
+    
+    if (comprimento == 0) {
+        if (arv == NULL) return false;
+        return arv->termino || no_tem_filho(arv);
+    }
+    
+    if (arv == NULL) return false;
+    
+    ArvoreTrie *tmp = arv;
+    
+    for (int i = 0; i < comprimento; i++) {
+        if (tmp->filhos[caracter[i]] == NULL) {
+            return false;
+        }
+        tmp = tmp->filhos[caracter[i]];
+    }
+    return true;
+}
+
+void menu() {
+    printf("\nMenu:\n");
+    printf("1. Inserir palavra\n");
+    printf("2. Buscar palavra\n");
+    printf("3. Remover palavra\n");
+    printf("4. Imprimir todas as palavras\n");
+    printf("5. Verificar prefixo\n");
+    printf("6. Sair\n");
+    printf("Escolha uma opcao: ");
+}
+
+int main() {
+    ArvoreTrie *arvore = NULL;
+    int opcao;
+    char palavra[100];
+
+    do {
+        menu();
+        scanf("%d", &opcao);
+        getchar(); // Limpar o buffer do teclado
+
+        switch (opcao) {
+            case 1:
+                printf("Digite a palavra para inserir: ");
+                fgets(palavra, sizeof(palavra), stdin);
+                palavra[strcspn(palavra, "\n")] = 0;
+                if (InsereArvore(&arvore, palavra)) {
+                    printf("Palavra inserida com sucesso!\n");
+                } else {
+                    printf("Palavra ja existe na arvore!\n");
+                }
+                break;
+            case 2:
+                printf("Digite a palavra para buscar: ");
+                fgets(palavra, sizeof(palavra), stdin);
+                palavra[strcspn(palavra, "\n")] = 0;
+                if (ProcuraArvore(arvore, palavra)) {
+                    printf("Palavra encontrada!\n");
+                } else {
+                    printf("Palavra nao encontrada!\n");
+                }
+                break;
+            case 3:
+                printf("Digite a palavra para remover: ");
+                fgets(palavra, sizeof(palavra), stdin);
+                palavra[strcspn(palavra, "\n")] = 0;
+                if (RemoveArv(&arvore, palavra)) {
+                    printf("Palavra removida com sucesso!\n");
+                } else {
+                    printf("Palavra nao encontrada!\n");
+                }
+                break;
+            case 4:
+                printf("Palavras na arvore:\n");
+                ImprimeArvore(arvore);
+                break;
+            case 5:
+                printf("Digite o prefixo para verificar: ");
+                fgets(palavra, sizeof(palavra), stdin);
+                palavra[strcspn(palavra, "\n")] = 0;
+                if (VerificaPrefixo(arvore, palavra)) {
+                    printf("Existe palavra com o prefixo!\n");
+                } else {
+                    printf("Nenhuma palavra com o prefixo encontrada.\n");
+                }
+                break;
+            case 6:
+                printf("Saindo...\n");
+                break;
+            default:
+                printf("Opcao invalida!\n");
+        }
+    } while (opcao != 6);
+
+    // Liberar memória (implementar função de liberação se necessário)
+    
+    return 0;
+}
