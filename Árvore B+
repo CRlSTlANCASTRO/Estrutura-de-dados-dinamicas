@@ -1,0 +1,476 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#define ORDEM 4 // Define a ordem da arvore B+
+
+// Estrutura do no da arvore B+
+typedef struct No {
+    bool folha;
+    int num_chaves;
+    int chaves[ORDEM];
+    struct No *filhos[ORDEM + 1];
+    struct No *proximo; // Para nos folha (lista encadeada)
+} No;
+
+// Prototipos de funcoes
+void imprimirPorNivel(No *raiz);
+No* criarNo(bool folha);
+void dividirFilho(No *pai, int index);
+void inserirNoNaoCheio(No *no, int chave);
+bool inserir(No **raiz, int chave);
+No* buscar(No *raiz, int chave, int *posicao);
+No* encontrarFolha(No *raiz, int chave);
+void removerDeFolha(No *folha, int chave);
+void removerDeNaoFolha(No *no, int index);
+int encontrarPredecessor(No *no, int index);
+int encontrarSucessor(No *no, int index);
+void emprestarAnterior(No *no, int index);
+void emprestarProximo(No *no, int index);
+void merge(No *no, int index);
+void ajustarRaiz(No **raiz);
+No* excluir(No *raiz, int chave);
+void imprimirEmOrdem(No *raiz);
+void menu();
+
+// Cria um novo no
+No* criarNo(bool folha) {
+    No novo = (No)malloc(sizeof(No));
+    if (novo == NULL) {
+        printf("Erro ao alocar memoria!\n");
+        exit(1);
+    }
+    novo->folha = folha;
+    novo->num_chaves = 0;
+    novo->proximo = NULL;
+    for (int i = 0; i < ORDEM + 1; i++)
+        novo->filhos[i] = NULL;
+    return novo;
+}
+
+// Divide um filho cheio
+void dividirFilho(No *pai, int index) {
+    No *filho = pai->filhos[index];
+    No *novo = criarNo(filho->folha);
+    novo->num_chaves = ORDEM / 2 - 1;
+
+    // Copia metade das chaves para o novo no
+    for (int i = 0; i < novo->num_chaves; i++)
+        novo->chaves[i] = filho->chaves[i + ORDEM / 2];
+
+    // Se nao for folha, copia os ponteiros dos filhos
+    if (!filho->folha) {
+        for (int i = 0; i < ORDEM / 2; i++)
+            novo->filhos[i] = filho->filhos[i + ORDEM / 2];
+    } else {
+        novo->proximo = filho->proximo;
+        filho->proximo = novo;
+    }
+
+    filho->num_chaves = ORDEM / 2 - 1;
+
+    // Ajusta os ponteiros no pai
+    for (int i = pai->num_chaves; i > index; i--)
+        pai->filhos[i + 1] = pai->filhos[i];
+
+    pai->filhos[index + 1] = novo;
+
+    // Move a chave do meio para o pai
+    for (int i = pai->num_chaves - 1; i >= index; i--)
+        pai->chaves[i + 1] = pai->chaves[i];
+
+    pai->chaves[index] = filho->chaves[ORDEM / 2 - 1];
+    pai->num_chaves++;
+}
+
+// Insere uma chave em um no nao cheio
+void inserirNoNaoCheio(No *no, int chave) {
+    int i = no->num_chaves - 1;
+
+    if (no->folha) {
+        // Encontra a posicao correta e desloca as chaves
+        while (i >= 0 && no->chaves[i] > chave) {
+            no->chaves[i + 1] = no->chaves[i];
+            i--;
+        }
+        no->chaves[i + 1] = chave;
+        no->num_chaves++;
+    } else {
+        // Encontra o filho que deve receber a nova chave
+        while (i >= 0 && no->chaves[i] > chave)
+            i--;
+
+        i++;
+        if (no->filhos[i]->num_chaves == ORDEM - 1) {
+            dividirFilho(no, i);
+            if (chave > no->chaves[i])
+                i++;
+        }
+        inserirNoNaoCheio(no->filhos[i], chave);
+    }
+}
+
+// Funcao principal de insercao
+// Funcao principal de insercao (modificada para retornar status)
+bool inserir(No **raiz, int chave) {
+    // Verificação de duplicatas
+    int posicao;
+    if (buscar(*raiz, chave, &posicao) != NULL) {
+        printf("Erro: O valor %d ja existe na arvore. Valores duplicados nao sao permitidos.\n", chave);
+        return false;
+    }
+
+    if (*raiz == NULL) {
+        No *novo = criarNo(true);
+        novo->chaves[0] = chave;
+        novo->num_chaves = 1;
+        *raiz = novo;
+        return true;
+    }
+
+    if ((*raiz)->num_chaves == ORDEM - 1) {
+        No *novo = criarNo(false);
+        novo->filhos[0] = *raiz;
+        dividirFilho(novo, 0);
+
+        int i = 0;
+        if (novo->chaves[0] < chave)
+            i++;
+        inserirNoNaoCheio(novo->filhos[i], chave);
+
+        *raiz = novo;
+        return true;
+    } else {
+        inserirNoNaoCheio(*raiz, chave);
+        return true;
+    }
+}
+
+// Funcao para buscar uma chave
+No* buscar(No *raiz, int chave, int *posicao) {
+    if (raiz == NULL) return NULL;
+
+    int i = 0;
+    while (i < raiz->num_chaves && chave > raiz->chaves[i])
+        i++;
+
+    if (i < raiz->num_chaves && chave == raiz->chaves[i]) {
+        *posicao = i;
+        if (raiz->folha) return raiz;
+        return buscar(raiz->filhos[i + 1], chave, posicao);
+    }
+
+    if (raiz->folha) return NULL;
+
+    return buscar(raiz->filhos[i], chave, posicao);
+}
+
+// Encontra a folha que contem a chave
+No* encontrarFolha(No *raiz, int chave) {
+    if (raiz == NULL) return NULL;
+
+    int i = 0;
+    while (i < raiz->num_chaves && chave > raiz->chaves[i])
+        i++;
+
+    if (raiz->folha) return raiz;
+
+    return encontrarFolha(raiz->filhos[i], chave);
+}
+
+// Remove uma chave de um no folha
+void removerDeFolha(No *folha, int index) {
+    for (int i = index; i < folha->num_chaves - 1; i++)
+        folha->chaves[i] = folha->chaves[i + 1];
+    folha->num_chaves--;
+}
+
+// Remove uma chave de um no nao folha
+void removerDeNaoFolha(No *no, int index) {
+    int chave = no->chaves[index];
+
+    if (no->filhos[index]->num_chaves >= ORDEM / 2) {
+        int predecessor = encontrarPredecessor(no, index);
+        no->chaves[index] = predecessor;
+        excluir(no->filhos[index], predecessor);
+    } else if (no->filhos[index + 1]->num_chaves >= ORDEM / 2) {
+        int sucessor = encontrarSucessor(no, index);
+        no->chaves[index] = sucessor;
+        excluir(no->filhos[index + 1], sucessor);
+    } else {
+        merge(no, index);
+        excluir(no->filhos[index], chave);
+    }
+}
+
+// Encontra o predecessor de uma chave
+int encontrarPredecessor(No *no, int index) {
+    No *atual = no->filhos[index];
+    while (!atual->folha)
+        atual = atual->filhos[atual->num_chaves];
+    return atual->chaves[atual->num_chaves - 1];
+}
+
+// Encontra o sucessor de uma chave
+int encontrarSucessor(No *no, int index) {
+    No *atual = no->filhos[index + 1];
+    while (!atual->folha)
+        atual = atual->filhos[0];
+    return atual->chaves[0];
+}
+
+// Empresta uma chave do irmao anterior
+void emprestarAnterior(No *no, int index) {
+    No *filho = no->filhos[index];
+    No *irmao = no->filhos[index - 1];
+
+    for (int i = filho->num_chaves; i > 0; i--)
+        filho->chaves[i] = filho->chaves[i - 1];
+
+    if (!filho->folha) {
+        for (int i = filho->num_chaves + 1; i > 0; i--)
+            filho->filhos[i] = filho->filhos[i - 1];
+        filho->filhos[0] = irmao->filhos[irmao->num_chaves];
+    }
+
+    filho->chaves[0] = no->chaves[index - 1];
+    no->chaves[index - 1] = irmao->chaves[irmao->num_chaves - 1];
+
+    filho->num_chaves++;
+    irmao->num_chaves--;
+}
+
+// Empresta uma chave do irmao seguinte
+void emprestarProximo(No *no, int index) {
+    No *filho = no->filhos[index];
+    No *irmao = no->filhos[index + 1];
+
+    filho->chaves[filho->num_chaves] = no->chaves[index];
+    no->chaves[index] = irmao->chaves[0];
+
+    if (!filho->folha)
+        filho->filhos[filho->num_chaves + 1] = irmao->filhos[0];
+
+    for (int i = 0; i < irmao->num_chaves - 1; i++)
+        irmao->chaves[i] = irmao->chaves[i + 1];
+
+    if (!irmao->folha) {
+        for (int i = 0; i < irmao->num_chaves; i++)
+            irmao->filhos[i] = irmao->filhos[i + 1];
+    }
+
+    filho->num_chaves++;
+    irmao->num_chaves--;
+}
+
+// Combina dois nos
+void merge(No *no, int index) {
+    No *filho = no->filhos[index];
+    No *irmao = no->filhos[index + 1];
+
+    filho->chaves[ORDEM / 2 - 1] = no->chaves[index];
+
+    for (int i = 0; i < irmao->num_chaves; i++)
+        filho->chaves[i + ORDEM / 2] = irmao->chaves[i];
+
+    if (!filho->folha) {
+        for (int i = 0; i <= irmao->num_chaves; i++)
+            filho->filhos[i + ORDEM / 2] = irmao->filhos[i];
+    }
+
+    for (int i = index; i < no->num_chaves - 1; i++)
+        no->chaves[i] = no->chaves[i + 1];
+
+    for (int i = index + 1; i < no->num_chaves; i++)
+        no->filhos[i] = no->filhos[i + 1];
+
+    filho->num_chaves += irmao->num_chaves + 1;
+    no->num_chaves--;
+
+    free(irmao);
+}
+
+// Ajusta a raiz apos remocao
+void ajustarRaiz(No **raiz) {
+    if ((*raiz)->num_chaves == 0 && !(*raiz)->folha) {
+        No *temp = *raiz;
+        *raiz = (*raiz)->filhos[0];
+        free(temp);
+    }
+}
+
+// Funcao principal de remocao
+No* excluir(No *raiz, int chave) {
+    if (raiz == NULL) return raiz;
+
+    int index = 0;
+    while (index < raiz->num_chaves && chave > raiz->chaves[index])
+        index++;
+
+    if (raiz->folha) {
+        if (index < raiz->num_chaves && raiz->chaves[index] == chave)
+            removerDeFolha(raiz, index);
+        return raiz;
+    }
+
+    if (index < raiz->num_chaves && raiz->chaves[index] == chave) {
+        removerDeNaoFolha(raiz, index);
+    } else {
+        No *filho = raiz->filhos[index];
+        if (filho->num_chaves < ORDEM / 2) {
+            if (index > 0 && raiz->filhos[index - 1]->num_chaves >= ORDEM / 2) {
+                emprestarAnterior(raiz, index);
+            } else if (index < raiz->num_chaves && raiz->filhos[index + 1]->num_chaves >= ORDEM / 2) {
+                emprestarProximo(raiz, index);
+            } else {
+                if (index < raiz->num_chaves)
+                    merge(raiz, index);
+                else
+                    merge(raiz, index - 1);
+            }
+        }
+        excluir(raiz->filhos[index], chave);
+    }
+
+    ajustarRaiz(&raiz);
+    return raiz;
+}
+
+void imprimirPorNivel(No *raiz) {
+    if (raiz == NULL) return;
+
+    // Fila para armazenar os nos a serem visitados
+    No *fila = (No *)malloc(sizeof(No *) * 1000); // Tamanho arbitrario grande
+    int inicio = 0, fim = 0;
+    
+    fila[fim++] = raiz;
+    
+    while (inicio < fim) {
+        int nivelAtual = fim - inicio;
+        
+        for (int i = 0; i < nivelAtual; i++) {
+            No *atual = fila[inicio++];
+            
+            // Imprime as chaves do no atual
+            printf("[");
+            for (int j = 0; j < atual->num_chaves; j++) {
+                printf("%d", atual->chaves[j]);
+                if (j < atual->num_chaves - 1) printf(",");
+            }
+            printf("] ");
+            
+            // Se nao for folha, adiciona os filhos na fila
+            if (!atual->folha) {
+                for (int j = 0; j <= atual->num_chaves; j++) {
+                    if (atual->filhos[j] != NULL) {
+                        fila[fim++] = atual->filhos[j];
+                    }
+                }
+            }
+        }
+        printf("\n"); // Nova linha para o proximo nivel
+    }
+    
+    free(fila);
+}
+
+// Imprime a arvore em ordem
+void imprimirEmOrdem(No *raiz) {
+    if (raiz != NULL) {
+        if (raiz->folha) {
+            for (int i = 0; i < raiz->num_chaves; i++)
+                printf("%d ", raiz->chaves[i]);
+        } else {
+            for (int i = 0; i < raiz->num_chaves; i++) {
+                imprimirEmOrdem(raiz->filhos[i]);
+                printf("%d ", raiz->chaves[i]);
+            }
+            imprimirEmOrdem(raiz->filhos[raiz->num_chaves]);
+        }
+    }
+}
+
+// Menu interativo
+void menu() {
+    printf("\nMenu Arvore B+:\n");
+    printf("1. Inserir valor\n");
+    printf("2. Excluir valor\n");
+    printf("3. Buscar valor\n");
+    printf("4. Mostrar arvore em ordem\n");
+    printf("5. Mostrar arvore por nivel\n");
+    printf("6. Sair\n");
+    printf("Escolha uma opcao: ");
+}
+
+int main() {
+    No *raiz = NULL;
+    int opcao, valor, posicao;
+    No* resultadoBusca;
+
+    while (1) {
+        menu();
+        if (scanf("%d", &opcao) != 1) {
+            printf("Entrada invalida!\n");
+            while (getchar() != '\n');
+            continue;
+        }
+
+        switch (opcao) {
+            case 1:
+    printf("Digite o valor a ser inserido: ");
+    if (scanf("%d", &valor) != 1) {
+        printf("Valor invalido!\n");
+        while (getchar() != '\n');
+        continue;
+    }
+    if (inserir(&raiz, valor)) {
+        printf("Valor %d inserido com sucesso!\n", valor);
+    }
+    break;
+            case 2:
+                printf("Digite o valor a ser excluido: ");
+                if (scanf("%d", &valor) != 1) {
+                    printf("Valor invalido!\n");
+                    while (getchar() != '\n');
+                    continue;
+                }
+                raiz = excluir(raiz, valor);
+                printf("Operacao de exclusao concluida.\n");
+                break;
+                
+            case 3:
+                printf("Digite o valor a ser buscado: ");
+                if (scanf("%d", &valor) != 1) {
+                    printf("Valor invalido!\n");
+                    while (getchar() != '\n');
+                    continue;
+                }
+                resultadoBusca = buscar(raiz, valor, &posicao);
+                if (resultadoBusca != NULL)
+                    printf("Valor %d encontrado na arvore!\n", valor);
+                else
+                    printf("Valor %d nao encontrado na arvore.\n", valor);
+                break;
+                
+            case 4:
+                printf("Arvore em ordem: ");
+                imprimirEmOrdem(raiz);
+                printf("\n");
+                break;
+                
+            case 5:
+                printf("Arvore por nivel:\n");
+                imprimirPorNivel(raiz);
+                break;
+                
+            case 6:
+                printf("Programa encerrado.\n");
+                exit(0);
+                
+            default:
+                printf("Opcao invalida! Tente novamente.\n");
+        }
+    }
+
+    return 0;
+}
