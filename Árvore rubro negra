@@ -1,0 +1,433 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+// Definicao das cores
+#define VERMELHO 1
+#define PRETO 0
+
+// Estrutura do no da arvore rubro-negra
+struct no {
+    int valor;
+    int cor;
+    struct no *esquerdo;
+    struct no *direito;
+    struct no *pai;
+};
+
+typedef struct no No;
+
+// Prototipos das funcoes
+No* criarNo(int valor);
+void inserir(No **raiz, int valor);
+void balancearInsercao(No **raiz, No *novoNo);
+void rotacaoEsquerda(No **raiz, No *x);
+void rotacaoDireita(No **raiz, No *y);
+No* buscar(No *raiz, int valor);
+void remover(No **raiz, int valor);
+void balancearRemocao(No **raiz, No *x);
+No* sucessor(No *no);
+void percorrerEmNivel(No *raiz);
+void liberarArvore(No *raiz);
+
+// Funcao para criar um novo no
+No* criarNo(int valor) {
+    No *novoNo = (No*)malloc(sizeof(No));
+    if (novoNo == NULL) {
+        printf("Erro ao alocar memoria.\n");
+        exit(1);
+    }
+    novoNo->valor = valor;
+    novoNo->cor = VERMELHO; // Novo no sempre vermelho
+    novoNo->esquerdo = NULL;
+    novoNo->direito = NULL;
+    novoNo->pai = NULL;
+    return novoNo;
+}
+
+// Funcao para inserir um valor na arvore
+void inserir(No **raiz, int valor) {
+    No *novoNo = criarNo(valor);
+    No *pai = NULL;
+    No *atual = *raiz;
+
+    // Encontrar a posicao correta para insercao
+    while (atual != NULL) {
+        pai = atual;
+        if (valor < atual->valor) {
+            atual = atual->esquerdo;
+        } else {
+            atual = atual->direito;
+        }
+    }
+
+    novoNo->pai = pai;
+
+    if (pai == NULL) {
+        *raiz = novoNo;
+    } else if (valor < pai->valor) {
+        pai->esquerdo = novoNo;
+    } else {
+        pai->direito = novoNo;
+    }
+
+    // Balancear a arvore apos insercao
+    balancearInsercao(raiz, novoNo);
+}
+
+// Funcao para balancear a arvore apos insercao
+void balancearInsercao(No **raiz, No *novoNo) {
+    No *pai = NULL;
+    No *avo = NULL;
+
+    while ((novoNo != *raiz) && (novoNo->cor == VERMELHO) && (novoNo->pai->cor == VERMELHO)) {
+        pai = novoNo->pai;
+        avo = pai->pai;
+
+        // Caso 1: Pai e tio sao vermelhos
+        if (pai == avo->esquerdo) {
+            No *tio = avo->direito;
+
+            if (tio != NULL && tio->cor == VERMELHO) {
+                avo->cor = VERMELHO;
+                pai->cor = PRETO;
+                tio->cor = PRETO;
+                novoNo = avo;
+            } else {
+                // Caso 2: Novo no e filho direito
+                if (novoNo == pai->direito) {
+                    rotacaoEsquerda(raiz, pai);
+                    novoNo = pai;
+                    pai = novoNo->pai;
+                }
+
+                // Caso 3: Novo no e filho esquerdo
+                rotacaoDireita(raiz, avo);
+                int corTemp = pai->cor;
+                pai->cor = avo->cor;
+                avo->cor = corTemp;
+                novoNo = pai;
+            }
+        } else {
+            No *tio = avo->esquerdo;
+
+            if (tio != NULL && tio->cor == VERMELHO) {
+                avo->cor = VERMELHO;
+                pai->cor = PRETO;
+                tio->cor = PRETO;
+                novoNo = avo;
+            } else {
+                // Caso 2: Novo no e filho esquerdo
+                if (novoNo == pai->esquerdo) {
+                    rotacaoDireita(raiz, pai);
+                    novoNo = pai;
+                    pai = novoNo->pai;
+                }
+
+                // Caso 3: Novo no e filho direito
+                rotacaoEsquerda(raiz, avo);
+                int corTemp = pai->cor;
+                pai->cor = avo->cor;
+                avo->cor = corTemp;
+                novoNo = pai;
+            }
+        }
+    }
+
+    (*raiz)->cor = PRETO; // A raiz sempre e preta
+}
+
+// Funcao para rotacionar a esquerda
+void rotacaoEsquerda(No **raiz, No *x) {
+    No *y = x->direito;
+    x->direito = y->esquerdo;
+
+    if (y->esquerdo != NULL) {
+        y->esquerdo->pai = x;
+    }
+
+    y->pai = x->pai;
+
+    if (x->pai == NULL) {
+        *raiz = y;
+    } else if (x == x->pai->esquerdo) {
+        x->pai->esquerdo = y;
+    } else {
+        x->pai->direito = y;
+    }
+
+    y->esquerdo = x;
+    x->pai = y;
+}
+
+// Funcao para rotacionar a direita
+void rotacaoDireita(No **raiz, No *y) {
+    No *x = y->esquerdo;
+    y->esquerdo = x->direito;
+
+    if (x->direito != NULL) {
+        x->direito->pai = y;
+    }
+
+    x->pai = y->pai;
+
+    if (y->pai == NULL) {
+        *raiz = x;
+    } else if (y == y->pai->esquerdo) {
+        y->pai->esquerdo = x;
+    } else {
+        y->pai->direito = x;
+    }
+
+    x->direito = y;
+    y->pai = x;
+}
+
+// Funcao para buscar um valor na arvore
+No* buscar(No *raiz, int valor) {
+    if (raiz == NULL || raiz->valor == valor) {
+        return raiz;
+    }
+
+    if (valor < raiz->valor) {
+        return buscar(raiz->esquerdo, valor);
+    } else {
+        return buscar(raiz->direito, valor);
+    }
+}
+
+// Funcao para remover um valor da arvore
+void remover(No **raiz, int valor) {
+    No *z = buscar(*raiz, valor);
+    if (z == NULL) {
+        printf("Valor nao encontrado na arvore.\n");
+        return;
+    }
+
+    No *x, *y;
+    if (z->esquerdo == NULL || z->direito == NULL) {
+        y = z;
+    } else {
+        y = sucessor(z);
+    }
+
+    if (y->esquerdo != NULL) {
+        x = y->esquerdo;
+    } else {
+        x = y->direito;
+    }
+
+    if (x != NULL) {
+        x->pai = y->pai;
+    }
+
+    if (y->pai == NULL) {
+        *raiz = x;
+    } else if (y == y->pai->esquerdo) {
+        y->pai->esquerdo = x;
+    } else {
+        y->pai->direito = x;
+    }
+
+    if (y != z) {
+        z->valor = y->valor;
+    }
+
+    if (y->cor == PRETO) {
+        balancearRemocao(raiz, x);
+    }
+
+    free(y);
+}
+
+// Funcao para balancear a arvore apos remocao
+void balancearRemocao(No **raiz, No *x) {
+    if (x == NULL) return;
+
+    while (x != *raiz && x->cor == PRETO) {
+        if (x == x->pai->esquerdo) {
+            No *irmao = x->pai->direito;
+
+            // Caso 1: Irmao e vermelho
+            if (irmao->cor == VERMELHO) {
+                irmao->cor = PRETO;
+                x->pai->cor = VERMELHO;
+                rotacaoEsquerda(raiz, x->pai);
+                irmao = x->pai->direito;
+            }
+
+            // Caso 2: Ambos os filhos do irmao sao pretos
+            if ((irmao->esquerdo == NULL || irmao->esquerdo->cor == PRETO) && 
+                (irmao->direito == NULL || irmao->direito->cor == PRETO)) {
+                irmao->cor = VERMELHO;
+                x = x->pai;
+            } else {
+                // Caso 3: Filho direito do irmao e preto
+                if (irmao->direito == NULL || irmao->direito->cor == PRETO) {
+                    if (irmao->esquerdo != NULL) {
+                        irmao->esquerdo->cor = PRETO;
+                    }
+                    irmao->cor = VERMELHO;
+                    rotacaoDireita(raiz, irmao);
+                    irmao = x->pai->direito;
+                }
+
+                // Caso 4: Filho direito do irmao e vermelho
+                irmao->cor = x->pai->cor;
+                x->pai->cor = PRETO;
+                if (irmao->direito != NULL) {
+                    irmao->direito->cor = PRETO;
+                }
+                rotacaoEsquerda(raiz, x->pai);
+                x = *raiz;
+            }
+        } else {
+            No *irmao = x->pai->esquerdo;
+
+            // Caso 1: Irmao e vermelho
+            if (irmao->cor == VERMELHO) {
+                irmao->cor = PRETO;
+                x->pai->cor = VERMELHO;
+                rotacaoDireita(raiz, x->pai);
+                irmao = x->pai->esquerdo;
+            }
+
+            // Caso 2: Ambos os filhos do irmao sao pretos
+            if ((irmao->direito == NULL || irmao->direito->cor == PRETO) && 
+                (irmao->esquerdo == NULL || irmao->esquerdo->cor == PRETO)) {
+                irmao->cor = VERMELHO;
+                x = x->pai;
+            } else {
+                // Caso 3: Filho esquerdo do irmao e preto
+                if (irmao->esquerdo == NULL || irmao->esquerdo->cor == PRETO) {
+                    if (irmao->direito != NULL) {
+                        irmao->direito->cor = PRETO;
+                    }
+                    irmao->cor = VERMELHO;
+                    rotacaoEsquerda(raiz, irmao);
+                    irmao = x->pai->esquerdo;
+                }
+
+                // Caso 4: Filho esquerdo do irmao e vermelho
+                irmao->cor = x->pai->cor;
+                x->pai->cor = PRETO;
+                if (irmao->esquerdo != NULL) {
+                    irmao->esquerdo->cor = PRETO;
+                }
+                rotacaoDireita(raiz, x->pai);
+                x = *raiz;
+            }
+        }
+    }
+
+    x->cor = PRETO;
+}
+
+// Funcao para encontrar o sucessor de um no
+No* sucessor(No *no) {
+    if (no->direito != NULL) {
+        No *atual = no->direito;
+        while (atual->esquerdo != NULL) {
+            atual = atual->esquerdo;
+        }
+        return atual;
+    }
+
+    No *p = no->pai;
+    while (p != NULL && no == p->direito) {
+        no = p;
+        p = p->pai;
+    }
+    return p;
+}
+
+// Funcao auxiliar para calcular a altura da arvore
+int altura(No *no) {
+    if (no == NULL) return 0;
+    int alturaEsq = altura(no->esquerdo);
+    int alturaDir = altura(no->direito);
+    return (alturaEsq > alturaDir) ? alturaEsq + 1 : alturaDir + 1;
+}
+
+// Funcao auxiliar para imprimir um nivel da arvore
+void imprimirNivel(No *no, int nivel) {
+    if (no == NULL) {
+        printf("X ");
+        return;
+    }
+
+    if (nivel == 1) {
+        printf("%d(%s) ", no->valor, no->cor == VERMELHO ? "V" : "P");
+    } else if (nivel > 1) {
+        imprimirNivel(no->esquerdo, nivel - 1);
+        imprimirNivel(no->direito, nivel - 1);
+    }
+}
+
+// Funcao para percorrer a arvore em nivel
+void percorrerEmNivel(No *raiz) {
+    int h = altura(raiz);
+    for (int i = 1; i <= h; i++) {
+        imprimirNivel(raiz, i);
+        printf("\n");
+    }
+}
+
+// Funcao para liberar a memoria da arvore
+void liberarArvore(No *no) {
+    if (no == NULL) return;
+    liberarArvore(no->esquerdo);
+    liberarArvore(no->direito);
+    free(no);
+}
+
+// Funcao principal
+int main() {
+    No *raiz = NULL;
+    int opcao, valor;
+
+    do {
+        printf("\nMenu:\n");
+        printf("1. Inserir valor\n");
+        printf("2. Remover valor\n");
+        printf("3. Buscar valor\n");
+        printf("4. Mostrar arvore\n");
+        printf("0. Sair\n");
+        printf("Escolha uma opcao: ");
+        scanf("%d", &opcao);
+
+        switch (opcao) {
+            case 1:
+                printf("Digite o valor a ser inserido: ");
+                scanf("%d", &valor);
+                inserir(&raiz, valor);
+                break;
+            case 2:
+                printf("Digite o valor a ser removido: ");
+                scanf("%d", &valor);
+                remover(&raiz, valor);
+                break;
+            case 3:
+                printf("Digite o valor a ser buscado: ");
+                scanf("%d", &valor);
+                No *resultado = buscar(raiz, valor);
+                if (resultado != NULL) {
+                    printf("Valor %d encontrado na arvore (cor: %s).\n", valor, resultado->cor == VERMELHO ? "Vermelho" : "Preto");
+                } else {
+                    printf("Valor %d nao encontrado na arvore.\n", valor);
+                }
+                break;
+            case 4:
+                printf("\nArvore Rubro-Negra (em nivel):\n");
+                percorrerEmNivel(raiz);
+                break;
+            case 0:
+                printf("Saindo...\n");
+                break;
+            default:
+                printf("Opcao invalida.\n");
+        }
+    } while (opcao != 0);
+
+    liberarArvore(raiz);
+    return 0;
+}
